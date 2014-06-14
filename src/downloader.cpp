@@ -15,13 +15,20 @@
 class Downloader::Private
 {
 public:
-    Private() {};
+    Private()
+        : netManager(Q_NULLPTR)
+        , totalCount(0)
+        , currentCount(0)
+    {};
 
     QString downloadUrl;
     QString title;
     QNetworkAccessManager *netManager;
     QQueue<QString> downloadUrlQueue;
     QFile outputFile;
+
+    int totalCount;     // total files to download
+    int currentCount;   // current file downloading
 };
 
 Downloader::Downloader(const QString &downloadUrl, QObject* parent)
@@ -88,6 +95,9 @@ Downloader::Downloader(const QString &downloadUrl, QObject* parent)
 
         qDebug() << QString::fromLatin1("Downloading into '%1' ...").arg(d->title);
 
+        // setup counters
+        d->totalCount = d->downloadUrlQueue.count();
+
         // start downloading!
         downloadFromQueue();
     });
@@ -108,7 +118,13 @@ void Downloader::downloadFromQueue()
 
         d->outputFile.setFileName(d->title + QDir::separator() + fileDownloadUrl.split('/').last());
 
-        qDebug() << QString::fromLatin1("Downloading '%1'").arg(fileDownloadUrl.split('/').last());
+        // increment current download counter
+        d->currentCount += 1;
+
+        qDebug() << QString::fromLatin1("Downloading '%1' -> %2 of %3")
+                        .arg(fileDownloadUrl.split('/').last())
+                        .arg(d->currentCount)
+                        .arg(d->totalCount);
 
         if (!d->outputFile.open(QIODevice::WriteOnly)) {
             qWarning("Can't write to file. Something's wrong");
@@ -122,8 +138,9 @@ void Downloader::downloadFromQueue()
 
         connect(reply, &QNetworkReply::finished, [this, reply] () {
             d->outputFile.write(reply->readAll());
-            reply->deleteLater();
             d->outputFile.close();
+
+            reply->deleteLater();
 
             downloadFromQueue();
         });

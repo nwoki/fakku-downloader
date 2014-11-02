@@ -10,6 +10,9 @@ public:
 
     void downloadFromQueue();
 
+private Q_SLOTS:
+    void onNetworkReplyFinished();
+
 private:
     class Private;
     Private * const d;

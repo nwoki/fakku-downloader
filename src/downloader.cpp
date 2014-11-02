@@ -16,7 +16,7 @@ class Downloader::Private
 {
 public:
     Private()
-        : netManager(Q_NULLPTR)
+        : netManager(nullptr)
         , totalCount(0)
         , currentCount(0)
     {};
@@ -50,57 +50,7 @@ Downloader::Downloader(const QString &downloadUrl, QObject* parent)
     // initiate download
     QNetworkReply *reply = d->netManager->get(QNetworkRequest(d->downloadUrl));
 
-    connect(reply, &QNetworkReply::finished, [this, reply] () {
-        QByteArray rcv = reply->readAll();
-        reply->deleteLater();
-
-        QRegExp regex("window.params.thumbs");
-        QRegExp endRegex("function update_params");
-
-        int startIndex = regex.indexIn(rcv);
-        int endIndex = endRegex.indexIn(rcv);
-        QString midStr = rcv.mid(startIndex, (endIndex - startIndex));
-
-        QList<QString> images = midStr.trimmed().split('=').last().trimmed()
-                                        .replace('\\', "")
-                                        .replace("thumbs", "images")
-                                        .replace("thumb.","")
-                                        .split("\",\"");
-
-        QList<QString> auxImageUrls;
-        for (QString imageUrl : images) {
-            imageUrl.replace("\"", "");
-
-            // clean
-            if (imageUrl.at(0) == '[') {
-                imageUrl.remove(0, 1);
-            }
-
-            if (imageUrl.at(imageUrl.count()-1) == ';') {
-                imageUrl.remove((imageUrl.count()-2), 2);
-            }
-
-            auxImageUrls.append(imageUrl);
-            d->downloadUrlQueue.enqueue(imageUrl);
-        }
-
-        // create folder for download
-        QDir downloadDir;
-
-        if (!downloadDir.mkdir(d->title)) {
-            qWarning("Already downloaded this!");
-            QCoreApplication::quit();
-            return;
-        }
-
-        qDebug() << QString::fromLatin1("Downloading into '%1' ...").arg(d->title);
-
-        // setup counters
-        d->totalCount = d->downloadUrlQueue.count();
-
-        // start downloading!
-        downloadFromQueue();
-    });
+    connect(reply, &QNetworkReply::finished, this, &Downloader::onNetworkReplyFinished);
 }
 
 
@@ -149,6 +99,68 @@ void Downloader::downloadFromQueue()
         QCoreApplication::quit();
     }
 }
+
+void Downloader::onNetworkReplyFinished()
+{
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+
+    if (reply == nullptr) {
+        qDebug("[Downloader::onNetworkReplyFinished] reply object is null");
+        return;
+    }
+
+    QByteArray rcv = reply->readAll();
+    reply->deleteLater();
+
+    QRegExp regex("window.params.thumbs");
+    QRegExp endRegex("function update_params");
+    int startIndex = regex.indexIn(rcv);
+    int endIndex = endRegex.indexIn(rcv);
+    QString midStr = rcv.mid(startIndex, (endIndex - startIndex));
+
+    QList<QString> images = midStr.trimmed().split('=').last().trimmed()
+                            .replace('\\', "")
+                            .replace("thumbs", "images")
+                            .replace("thumb.","")
+                            .split("\",\"");
+
+    // clean
+    QList<QString> auxImageUrls;
+    for (QString imageUrl : images) {
+
+        // clean
+        if (imageUrl.at(0) == '[') {
+            imageUrl.remove(0, 2);
+        }
+
+        if (imageUrl.at(imageUrl.count()-1) == ';') {
+            imageUrl.remove((imageUrl.count()-3), 3);
+        }
+
+        imageUrl.prepend("http:");
+
+        auxImageUrls.append(imageUrl);
+        d->downloadUrlQueue.enqueue(imageUrl);
+    }
+
+    // create folder for download
+    QDir downloadDir;
+
+    if (!downloadDir.mkdir(d->title)) {
+        qWarning("Already downloaded this!");
+        QCoreApplication::quit();
+        return;
+    }
+
+    qDebug() << QString::fromLatin1("Downloading into '%1' ...").arg(d->title);
+
+    // setup counters
+    d->totalCount = d->downloadUrlQueue.count();
+
+    // start downloading!
+    downloadFromQueue();
+}
+
 
 
 

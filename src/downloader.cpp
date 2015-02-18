@@ -49,7 +49,6 @@ Downloader::Downloader(const QString &downloadUrl, QObject* parent)
 
     // initiate download
     QNetworkReply *reply = d->netManager->get(QNetworkRequest(d->downloadUrl));
-
     connect(reply, &QNetworkReply::finished, this, &Downloader::onNetworkReplyFinished);
 }
 
@@ -112,13 +111,18 @@ void Downloader::onNetworkReplyFinished()
     QByteArray rcv = reply->readAll();
     reply->deleteLater();
 
-    QRegExp regex("window.params.thumbs");
-    QRegExp endRegex("function update_params");
+    QString regexStartStr("window.params.thumbs = ");
+    QRegExp regex(regexStartStr);
     int startIndex = regex.indexIn(rcv);
-    int endIndex = endRegex.indexIn(rcv);
-    QString midStr = rcv.mid(startIndex, (endIndex - startIndex));
 
-    QList<QString> images = midStr.trimmed().split('=').last().trimmed()
+    // get the portion of data from the start of the file list.
+    QString data = rcv.mid(startIndex);
+    QRegExp endRegex(";");
+    int endIndex = endRegex.indexIn(data);
+
+    QString fileData = data.mid(0, endIndex);
+
+    QList<QString> images = fileData.trimmed().split(" = ").last()
                             .replace('\\', "")
                             .replace("thumbs", "images")
                             .replace("thumb.","")
@@ -133,8 +137,8 @@ void Downloader::onNetworkReplyFinished()
             imageUrl.remove(0, 2);
         }
 
-        if (imageUrl.at(imageUrl.count()-1) == ';') {
-            imageUrl.remove((imageUrl.count()-3), 3);
+        if (imageUrl.at(imageUrl.length() - 1) == ']') {
+            imageUrl.remove(imageUrl.length() - 2, 2);
         }
 
         imageUrl.prepend("http:");
